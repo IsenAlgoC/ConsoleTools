@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
 	setWriteColor(BRIGHTBLUE);
 	cercle(centre, 25);
 	setWriteColor(BRIGHTRED);
-	elipse(centre, 45, 15);
+	ellipse(centre, 45, 15);
 	setWriteColor(BRIGHTGREEN);
 	lissajous(centre, 48 , 28, 3, 2);
 	// place le curseur en bas à gauche de l'écran
@@ -78,7 +78,7 @@ int plot(COORD coord) {
 }
 
 
-int elipse(COORD centre, double rayonX, double rayonY) {
+int ellipse(COORD centre, double rayonX, double rayonY) {
 	double deuxPi = 2 * Pi;
 	double pasRad = deuxPi / 360;
 	double anglerad = 0;
