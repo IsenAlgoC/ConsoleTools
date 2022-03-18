@@ -1,10 +1,13 @@
 #include "ConsoleTools.h"
 
 /***********************************/
-//	fichier ConsoleTools.c
-//  Version 6.1
-//	20-08-2020
+//	file ConsoleTools.c
+#define VERSION "7"
+#define RELEASE "0"
+#define DATE "09-03-2022"
 /***********************************/
+// ref : https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
+
 SYSTEMTIME elapsedTime(bool reset) {
 
 	SYSTEMTIME duration;
@@ -24,8 +27,6 @@ SYSTEMTIME elapsedTime(bool reset) {
 	fduration.dwLowDateTime = fduration64.LowPart;
 	FileTimeToSystemTime(&fduration, &duration);
 	fprevTime64 = fcurrTime64;
-
-
 	return(duration);
 }
 
@@ -33,7 +34,7 @@ SYSTEMTIME elapsedTime(bool reset) {
 char readChar(const char* filtre) {
 
 	char car = -1;
-	char* tmp;
+	const char* tmp;
 	while (car == -1) {
 		car = 0;
 		while (car == 0) car = (char)_getch();
@@ -85,6 +86,20 @@ int openConsole() {
 		return 1;
 	}
 	wOldMode = Mode;
+	// Set output mode to handle virtual terminal sequences
+	Mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	if (!SetConsoleMode(hStdout, Mode))
+	{
+		return 1;
+	}
+
+	// Display Console Tools Version
+
+	char buffer[128];
+	sprintf_s(buffer, _countof(buffer), "ConsoleTools Version %s.%s - %s\n", VERSION, RELEASE, DATE);
+	moveCursor(0, 0);
+	fputs(buffer, stderr);
+	Sleep(2000);
 	return(0);
 }
 
@@ -315,7 +330,18 @@ int setBackGroundColor(WORD col) {
 int closeConsole() {
 	// Restore the original text colors. 
 
-	SetConsoleTextAttribute(hStdout, wOldColorAttrs);
+	if (!SetConsoleTextAttribute(hStdout, wOldColorAttrs)) {
+		return 1;
+	}
+
+	// Restore the original console mode. 
+	if (!SetConsoleMode(hStdout, wOldMode))
+	{
+		return 1;
+	}
+
+
+
 	return(0);
 }
 
@@ -323,9 +349,17 @@ int closeConsole() {
 COORD getConsoleSize() {
 	COORD Size;
 
-	Size.X = csbiInfo.dwSize.X;
-	Size.Y = csbiInfo.dwSize.Y;
+	//Size.X = csbiInfo.dwSize.X;
+	//Size.Y = csbiInfo.dwSize.Y;
+	Size.X = csbiInfo.srWindow.Right - csbiInfo.srWindow.Left + 1;
+	Size.Y = csbiInfo.srWindow.Bottom - csbiInfo.srWindow.Top + 1;
 	return(Size);
+}
+void printStatusLine(const char* const pszMessage, COORD const Size)
+{
+	printf(CSI "%d;1H", Size.Y);
+	printf(CSI "K"); // clear the line
+	printf(pszMessage);
 }
 
 void moveCursor(unsigned short int X, unsigned short int Y) {
@@ -333,8 +367,8 @@ void moveCursor(unsigned short int X, unsigned short int Y) {
 	COORD pos;
 	pos.X = X;
 	pos.Y = Y;
-	SetConsoleCursorPosition(hStdout, pos);
-
+	// SetConsoleCursorPosition(hStdout, pos);
+	printf(CSI "%d;%dH", Y + 1, X + 1);
 	return;
 }
 int plotChar(char SomeChar) {
@@ -349,36 +383,275 @@ int plotChar(char SomeChar) {
 	}
 }
 
+
 int rangedRand(int range_min, int range_max)
 {
-	// Generate random numbers in the half-closed interval
-	// [range_min, range_max). In other words,
-	// range_min <= random number < range_max
-
 	int u = (int)((double)rand() / ((double)RAND_MAX + 1) * ((double)range_max - (double)range_min)) + range_min;
 	return(u);
 }
 
-
+/// <summary>
+/// Generate random numbers in the half-closed interval
+/// [range_min, range_max).
+/// </summary>
+/// <param name="range_min"></param>
+/// <param name="range_max"></param>
+/// <returns></returns>
+float floatRangedRand(float range_min, float range_max)
+{
+	float u = (float)((double)rand() / ((double)RAND_MAX + 1) * ((double)range_max - (double)range_min)) + range_min;
+	return(u);
+}
 
 int clearScreen(void) {
-	COORD consoleSize;
+	// https://docs.microsoft.com/fr-fr/windows/console/clearing-the-screen
 
-	//consoleSize = getConsoleSize();
-	consoleSize.X = 120;
-	consoleSize.Y = 60;
-	// setWriteColor(GREY);
-	// setBackGroundColor(BLACK);
-	for (int i = 0; i < consoleSize.Y; i++)
+			// Hold original mode to restore on exit to be cooperative with other command-line apps.
+
+	Mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+
+	// Try to set the mode.
+	if (!SetConsoleMode(hStdout, Mode))
 	{
-		for (int j = 0; j < consoleSize.X; j++)
-		{
-			
-			moveCursor(j, i);
-			plotChar(' ');
-		}
+		return GetLastError();
 	}
+
+	// Write the sequence for clearing the display.
+	DWORD written = 0;
+	PCWSTR sequence = L"\x1b[2J";
+	if (!WriteConsoleW(hStdout, sequence, (DWORD)wcslen(sequence), &written, NULL))
+	{
+		// If we fail, try to restore the mode on the way out.
+		SetConsoleMode(hStdout, wOldMode);
+		return GetLastError();
+	}
+
+	// To also clear the scroll back, emit L"\x1b[3J" as well.
+	// 2J only clears the visible window and 3J only clears the scroll back.
+	written = 0;
+	sequence = L"\x1b[3J";
+	if (!WriteConsoleW(hStdout, sequence, (DWORD)wcslen(sequence), &written, NULL))
+	{
+		// If we fail, try to restore the mode on the way out.
+		SetConsoleMode(hStdout, wOldMode);
+		return GetLastError();
+	}
+
+	// Restore the mode on the way out to be nice to other command-line applications.
+	SetConsoleMode(hStdout, wOldMode);
 
 	return 0;
 }
 
+
+
+int maxValue(int* array, unsigned int eltsCounts) {
+	int max = *array;
+	for (size_t i = 0; i < eltsCounts; i++)
+	{
+		if (array[i] > max) {
+			max = array[i];
+		}
+	}
+	return max;
+}
+
+
+int drawArray(int* array, int EltsCount, COORD p1, COORD p2, bool prop, bool reverse, bool paint, int color) {
+
+	int winSizeX;
+	int winSizeY;
+
+	// Calculate drawing area size
+	winSizeX = p2.X - p1.X + 1;
+	winSizeY = p2.Y - p1.Y + 1;
+
+
+	// Quit if too small
+	if (winSizeX < 3 || winSizeY < EltsCount + 1) return(-1);
+
+	// Adjust size if size X not odd for symetric drawing purpose
+	if (winSizeX % 2 == 0) {
+		p2.X--;
+		winSizeX--;
+	}
+
+	// paint option selected : paint background in selected color before drawing array
+	if (paint) {
+		setBackGroundColor(color);
+		for (int line = p1.Y; line <= p2.Y; line++) {
+			for (int col = p1.X; col <= p2.X; col++) {
+				moveCursor(col, line);
+				plotChar(' ');
+			}
+		}
+
+	}
+
+	int currentColor = 0;
+	// set color for stack base
+	setWriteColor(RED);
+	// draw base
+	for (unsigned short col = p1.X; col <= p2.X; col++) {
+		moveCursor(col, p2.Y);
+		plotChar('\xDB');
+	}
+	for (unsigned short line = p1.Y; line <= p2.Y; line++) {
+		unsigned short col = (p1.X + p2.X) / 2;
+
+		moveCursor(col, line);
+		plotChar('\xDB');
+	}
+	// calculate scale factor to fit drawing area
+	float scaleFactor = 1.0;
+	int maxVal = maxValue(array, EltsCount);
+	scaleFactor = (float)winSizeX / (float)maxVal;
+	int midPos = (p1.X + p2.X) / 2;
+
+	// control browsing direction of values in array
+
+	int inc = (reverse) ? -1 : 1;
+
+	for (int idx = reverse ? EltsCount - 1 : 0; (!reverse && idx < EltsCount) || (reverse && idx >= 0); idx += inc)
+	{
+
+		int val = array[idx];
+		// select color index between 7 and 15 for bright colors
+		currentColor = val % 7 + 9;
+		setWriteColor(currentColor);
+		int diskSize;
+
+		if (prop) {
+			diskSize = (int)roundf((val * scaleFactor));
+			if (diskSize % 2 == 0) {
+				diskSize--;
+			}
+
+			diskSize = diskSize < 3 ? 3 : diskSize;
+			diskSize = diskSize > winSizeX ? winSizeX : diskSize;
+		}
+		else
+		{
+			diskSize = winSizeX;
+
+		}
+
+		for (int col = midPos - (diskSize / 2); col <= midPos + (diskSize / 2); col++) {
+			if (col != midPos) {
+				moveCursor(col, p2.Y - idx - 1);
+				plotChar('\xDB');
+			}
+			if (!prop) {
+				moveCursor(p1.X + 1, p2.Y - idx - 1);
+				setWriteColor(BLACK);
+				setBackGroundColor(currentColor);
+				printf_s("%3d", val);
+				setWriteColor(currentColor);
+				setBackGroundColor(BLACK);
+			}
+		}
+	}
+
+	setWriteColor(WHITE);
+	moveCursor(0, p2.Y + 1);
+	return(0);
+}
+
+void printVerticalBorder()
+{
+	printf(ESC "(0"); // Enter Line drawing mode
+	printf(CSI "104;93m"); // bright yellow on bright blue
+	printf("x"); // in line drawing mode, \x78 -> \u2502 "Vertical Bar"
+	printf(CSI "0m"); // restore color
+	printf(ESC "(B"); // exit line drawing mode
+}
+
+void printHorizontalBorder(int linePos, int tabStopCount, int tabStopPostions[], bool displayColumn[], bool fIsTop)
+{
+	COORD size = getConsoleSize();
+	int startColumn = 0;
+	int endColumn = size.X - 1;
+	int tabIdx = 0;
+	while (tabIdx < tabStopCount - 1 && !displayColumn[tabIdx]) tabIdx++;
+	if (!displayColumn[tabIdx]) tabIdx = 0;
+	startColumn = tabStopPostions[tabIdx];
+
+	tabIdx = tabStopCount - 1;
+	while (tabIdx > 0 && !displayColumn[tabIdx]) tabIdx--;
+	if (!displayColumn[tabIdx]) tabIdx = tabStopCount - 1;
+	endColumn = tabStopPostions[tabIdx];
+	if (startColumn >= endColumn) return;
+
+	printf(CSI "%d;%dH", linePos, startColumn);
+
+	printf(ESC "(0"); // Enter Line drawing mode
+	printf(CSI "104;93m"); // Make the border bright yellow on bright blue
+	printf(fIsTop ? "l" : "m"); // print left corner 
+
+	int dashCount = endColumn - startColumn - 1;
+	for (int i = 0; i < dashCount; i++) {
+		printf("q"); // in line drawing mode, \x71 -> \u2500 "HORIZONTAL SCAN LINE-5"
+	}
+	printf(fIsTop ? "k" : "j"); // print right corner
+	printf(CSI "0m");
+	printf(ESC "(B"); // exit line drawing mode
+}
+void enterAlternateBuffer() {
+	// Enter the alternate buffer
+	printf(CSI "?1049h");
+	return;
+}
+void exitAlternateBuffer() {
+	// Exit the alternate buffer
+	printf(CSI "?1049l");
+}
+void setScrollingMargins(int top, int bottom) {
+	COORD size;
+	size = getConsoleSize();
+	printf(CSI "%d;%dr", top + 1, size.Y - bottom);
+}
+void clearAllTabStop() {
+	printf(CSI "3g"); // clear all tab stops
+}
+void defineTabStop(int tabStopCount, int tabStopPostions[]) {
+	clearAllTabStop();
+	for (int i = 0; i < tabStopCount; i++)
+	{
+		printf(CSI "1;%dH", tabStopPostions[i]); // Move to column index i+1
+		printf(ESC "H"); // set a tab stop
+	}
+}
+void drawColumnedFrame(int tabStopCount, int tabStopPostions[], bool displayColumn[], int topMargin, int bottomMargin) {
+	COORD size;
+	size = getConsoleSize();
+	int linesCount = size.Y - topMargin - bottomMargin - 2;
+	int totalTabsCount = linesCount * tabStopCount;
+	int printedTabCount = 0;
+
+	if (size.Y < (topMargin + bottomMargin + 3)) return;
+
+	setScrollingMargins(topMargin + 1, bottomMargin + 1);
+	defineTabStop(tabStopCount, tabStopPostions);
+	printf(CSI "104;93m"); // bright yellow on bright blue
+	//printf(CSI "0J"); // clean viewPort
+	printf(CSI "%d;1H", topMargin + 2); // go to column 1, skip horizontal border
+	for (int line = 0; line < linesCount; line++)
+	{
+		for (int col = 0; col < tabStopCount; col++)
+		{
+			if (displayColumn[col]) {
+				printVerticalBorder();
+				if (printedTabCount < totalTabsCount - 1) // don't advance to next line if this is the last line
+					printf("\t"); // advance to next tab stop
+			}
+			printedTabCount += 1;
+		}
+	}
+	// Print a top border - Yellow
+
+	printHorizontalBorder(topMargin + 1, tabStopCount, tabStopPostions, displayColumn, true);
+
+	printHorizontalBorder(size.Y - bottomMargin, tabStopCount, tabStopPostions, displayColumn, false);
+	printf(CSI "0m"); // restore color
+	return;
+}
