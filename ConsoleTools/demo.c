@@ -16,7 +16,12 @@
 COORD org = { 0, 0};
 char allKey[] = "()wW0123456789aAbBcCdDeEfFgGhHiIjJkKlLmMmNoOqQrRsStTuUwWyxXYzZ+-*/=<.\n\r";
 COORD consoleSize;
-
+/// <summary>
+/// demo program
+/// </summary>
+/// <param name="argc"></param>
+/// <param name="argv"></param>
+/// <returns></returns>
 int main(int argc, char* argv[]) {
 	
 	COORD pos = { 0,0 };
