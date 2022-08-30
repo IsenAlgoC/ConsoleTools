@@ -157,6 +157,23 @@ int main(int argc, char* argv[]) {
 	printStatusLine("Press any key to exit alternate buffer", consoleSize);
 	wch = _getwch();
 	exitAlternateBuffer();
+	moveCursor(0, consoleSize.Y - 20);
+	printf("\n\r");
+	for (int i = 0; i < 16; i++)
+	{
+		setBackGroundColor(i);
+		for (int j = 0; j < 16; j++)
+		{
+			setWriteColor(j);
+
+
+			printf("%c", '@');
+		}
+		printf("\n");
+	}
+
+	setBackGroundColor(WHITE);
+	setWriteColor(BLUE);
 
 	// attente d'une touche pour continuer
 	printStatusLine("Press any key to exit", consoleSize);
