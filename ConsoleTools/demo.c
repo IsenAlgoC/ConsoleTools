@@ -6,7 +6,7 @@
 #include <locale.h>
 #include "demo.h"
 
-//
+//	Global Informations
 //	Auteur : Pascal RICQ
 //	version projet :  7.0
 //  date 09-03-2022
